@@ -2,12 +2,29 @@ import random
 
 import cv2
 import numpy as np
+import torch
+import os
+import torch.nn as nn
 
 from utils.utils import *
+from functools import lru_cache
 
 _VIDEO_EXT = ['.avi', '.mp4', '.mov']
 _IMAGE_EXT = ['.jpg', '.png']
 _IMAGE_SIZE = 224
+
+## FlowUnderAttack load model
+import sys
+sys.path.append(f'./FlowUnderAttack/')
+import helper_functions.ownutilities as ownutilities
+net = 'RAFT'#'FlowNetC'#
+custom_weight_path = './FlowUnderAttack/models/_pretrained_weights/raft-sintel.pth'#FlowNet2-C_checkpoint.pth.tar'#
+
+model_takes_unit_input = ownutilities.model_takes_unit_input(net)
+model, path_weights = ownutilities.import_and_load(net, custom_weight_path=custom_weight_path, make_unit_input=not model_takes_unit_input, variable_change=False, make_scaled_input_model=True,device='cuda')
+model.eval()
+for p in model.parameters():
+    p.requires_grad = False
 
 
 def split(a, n):
@@ -124,7 +141,7 @@ class FrameGenerator(object):
         return frame
 
 
-def get_video_generator(video_path, opts):
+def get_video_generator(video_path, opts, class_name=None):
     if opts.out_path is None:
         out_path = Path(*video_path.parts[:-3], "pre-processed", "train",
                         video_path.parts[-2], video_path.stem)
@@ -133,14 +150,10 @@ def get_video_generator(video_path, opts):
         out_path = Path(opts.out_path)
     out_path_dic = {}
 
-    if opts.sample_type == "fps":
-        out_path_dic["flow"] = out_path / ('flow-FPS_{}.npy'.format(opts.out_fps))
-        out_path_dic["rgb"] = out_path / ('rgb-FPS_{}.npy'.format(opts.out_fps))
-    elif opts.sample_type == "num":
-        out_path_dic["flow"] = out_path / ('rgb-SampleNum_{}.npy'.format(opts.sample_num))
-        out_path_dic["rgb"] = out_path / ('rgb-SampleNum_{}.npy'.format(opts.sample_num))
-    else:
-        raise ValueError("At least one of A and B is not None")
+    out_path_dic["flow"] = out_path/"flow"/class_name if class_name is not None else out_path/"flow"
+    os.makedirs(out_path_dic["flow"], exist_ok=True)
+    out_path_dic["rgb"] = out_path/"rgb"/class_name if class_name is not None else out_path/"rgb"
+    os.makedirs(out_path_dic["rgb"], exist_ok=True)
 
     video_object = FrameGenerator(video_path, opts.sample_num, opts.random_choice, use_fps=(opts.sample_type == "fps"),
                                   resize=opts.resize, in_fps=opts.in_fps, out_fps=opts.out_fps)
@@ -157,67 +170,106 @@ def compute_rgb(video_object, out_path):
     # # rgb = rgb[:-1]
     # rgb = np.float32(np.array(rgb))
     rgb = np.array(video_object.frames[:-1])
-    np.save(out_path["rgb"], rgb)
-    log('save rgb with shape ', rgb.shape)
+    # np.save(out_path["rgb"], rgb)
+    # log('save rgb with shape ', rgb.shape)
     return rgb
 
+@lru_cache(maxsize=1)
+def get_patch_and_defense(
+    patch = '',
+    defense = '',
+    ):
+    if patch != '':
+        from helper_functions.patch_adversary import PatchAdversary
+        P = PatchAdversary(patch, size = 100, angle = [-10,10], scale = [.95,1.05]) # Change of variable is always false for evaluation
+        P = P.cuda().requires_grad_(False)
+    else:
+        P = lambda x,y: (x,y,1)
 
-def compute_flow(video_object, out_path):
+    if defense != '' or defense.lower() != 'none':
+        from helper_functions.defenses import ILP,LGS
+        if defense == 'ILP':
+            print(f"ILP defense with k = {16}, o = {8}, t = {.15}, s = {15}, r = {5}")
+            D = ILP(16, 8, .15, 15, 5, "forward")
+        elif defense == 'LGS':
+            print(f"LGS defense with k = {16}, o = {8}, t = {.15}, s = {15}")
+            D = LGS(16, 8, .15, 15, "forward")
+        else:
+            print("No defense")
+            D = lambda x,y: (x,y)
+    return P,D
+
+def compute_flow(video_object, opts, upsample_factor=2.3):
     """Compute the TV-L1 optical flow."""
+
+    P,D = get_patch_and_defense(opts.patch_path, opts.defense)
     flow = []
 
     bins = np.linspace(-20, 20, num=256)
-    TVL1 = cv2.optflow.DualTVL1OpticalFlow_create()
     frame1 = video_object.get_frame()
-    prev = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
+    frame1 = torch.from_numpy(frame1).permute(2, 0, 1).unsqueeze(0).float().cuda().requires_grad_(False)
     for i in range(len(video_object) - 1):
         frame2 = video_object.get_frame()
-        curr = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)
-        curr_flow = TVL1.calc(prev, curr, None)
-        assert (curr_flow.dtype == np.float32)
+        frame2 = torch.from_numpy(frame2).permute(2, 0, 1).unsqueeze(0).float().cuda().requires_grad_(False)
 
-        # Truncate large motions
-        curr_flow[curr_flow >= 20] = 20
-        curr_flow[curr_flow <= -20] = -20
 
-        # digitize and scale to [-1;1]
-        curr_flow = np.digitize(curr_flow, bins)
-        # curr_flow = (curr_flow / 255.) * 2 - 1
+        shape = frame1.shape
+        I1 = nn.Upsample(scale_factor=upsample_factor, mode='bilinear')(frame1)
+        I2 = nn.Upsample(scale_factor=upsample_factor, mode='bilinear')(frame2)
+        padder, [I1, I2] = ownutilities.preprocess_img(net, I1, I2)
+        if not model_takes_unit_input:
+            I1 = I1 / 255.
+            I2 = I2 / 255.
+            
+        I1, I2,*_ = P(I1,I2)
+        I1, I2 = D(I1,I2)
+            
+        curr_flow = ownutilities.compute_flow(model,"scaled_input_model",I1,I2)
+        [curr_flow] = ownutilities.postprocess_flow(net, padder, curr_flow)
+        # downsample flow
+        curr_flow = upsample_flow(curr_flow.permute(0,2,3,1).cpu(), shape[2], shape[3])
+        curr_flow = curr_flow.numpy()[0]
 
         # Append this flow frame
         flow.append(curr_flow)
 
-        prev = curr
+        frame1 = frame2
 
     flow = np.array(flow)  # np.float32(
-    np.save(out_path["flow"], flow)
-    log("Save flow with shape ", flow.shape)
+    # np.save(out_path["flow"], flow)
+    # log("Save flow with shape ", flow.shape)
     return flow
 
 
-def pre_process(video_path, opts):
+def pre_process(video_path, opts, class_name=None):
     video_path = Path(video_path)
+    
     with Timer('Loading video'):
         log('Loading video...')
-        video_object, out_path_dic = get_video_generator(video_path, opts)
+        video_object, out_path_dic = get_video_generator(video_path, opts, class_name)
+
     with Timer('Compute RGB'):
         log('Extract RGB...')
         rgb_data = compute_rgb(video_object, out_path_dic)
+        np.save(out_path_dic["rgb"]/f"{video_path.stem}.npy", rgb_data)
 
     video_object.reset()
     with Timer('Compute flow'):
         log('Extract Flow...')
-        flow_data = compute_flow(video_object, out_path_dic)
+        flow_data = compute_flow(video_object, opts)
+        np.save(out_path_dic["flow"]/f"{video_path.stem}.npy", flow_data)
     return rgb_data, flow_data
 
 
 def mass_process(opts):
-    if opts.is_image:
-        data_root = Path("data/images/")
+    if opts.input_path is None:
+        if opts.is_image:
+            data_root = Path("data/images/")
+        else:
+            data_root = Path("data/videos/")
     else:
-        data_root = Path("data/videos/")
-    raw_path = data_root / "raw"
-    class_paths = [i for i in raw_path.iterdir() if not i.stem.startswith(".") and i.is_dir()]
+        data_root = Path(opts.input_path)
+    class_paths = [i for i in data_root.iterdir() if not i.stem.startswith(".") and i.is_dir()]
     item_paths = []
     for class_path in class_paths:
         if opts.is_image:
@@ -226,10 +278,25 @@ def mass_process(opts):
         else:
             item_paths.extend([i for i in class_path.iterdir()
                                if not i.stem.startswith(".") and i.is_file() and i.suffix.lower() in _VIDEO_EXT])
+    
+    # create classes.txt
+    os.makedirs(Path(opts.out_path), exist_ok=True)
+    with open(Path(opts.out_path)/"classes.txt", "w") as f:
+        for i in class_paths:
+            f.write(f"{i.name}\n")
+
     for item_path in item_paths:
+        class_name = item_path.parent.name
+        # if already processed, skip
+        
+        if (Path(opts.out_path)/"rgb"/class_name/item_path.stem).exists() and \
+                (Path(opts.out_path)/"flow"/class_name/item_path.stem).exists():
+            log("Already processed:", str(item_path))
+            continue
+        
         with Timer(item_path.name):
             log("Now start processing:", str(item_path))
-            pre_process(item_path, opts)
+            pre_process(item_path, opts, class_name)
 
 
 def main(opts):
@@ -294,7 +361,16 @@ if __name__ == '__main__':
         default='fps',
         help="'fps': sample the video to a certain FPS, or 'num': control the number of output video, "
              "choose the video sample method.")
-
+    parser.add_argument(
+        '--patch_path',
+        type=str,
+        default='',
+        help="The path to the patch file, which is a png or npy file. If not specified, no patch will be applied.")
+    parser.add_argument(
+        '--defense',
+        default='',
+        choices=['', 'LGS','ILP'],
+        help="The defense method to be applied. If not specified, no defense will be applied.")
     args = parser.parse_args()
 
     if args.is_image:

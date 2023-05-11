@@ -11,7 +11,7 @@ rgb_pt_checkpoint = 'model/model_rgb.pth'
 def run_demo(args):
     kinetics_classes = [x.strip() for x in open(args.classes_path)]
 
-    def get_scores(sample, model):
+    def get_scores(sample, model,type='rgb'):
         sample_var = torch.autograd.Variable(torch.from_numpy(sample))#.cuda())
         print(sample_var.dtype)
         out_var, out_logit = model(sample_var)
@@ -20,7 +20,8 @@ def run_demo(args):
         top_val, top_idx = torch.sort(out_tensor, 1, descending=True)
 
         print(
-            'Top {} classes and associated probabilities: '.format(args.top_k))
+            'Top {} classes and associated probabilities for {} model'.format(
+                args.top_k,type))
         for i in range(args.top_k):
             print('[{}]: {:.6E}'.format(kinetics_classes[top_idx[0, i]],
                                         top_val[0, i]))
@@ -34,7 +35,7 @@ def run_demo(args):
         # i3d_rgb.cuda()
 
         rgb_sample = np.load(args.rgb_sample_path).transpose(0, 4, 1, 2, 3)
-        out_rgb_logit = get_scores(rgb_sample, i3d_rgb)
+        out_rgb_logit = get_scores(rgb_sample, i3d_rgb,type='rgb')
 
     # Run flow model
     if args.flow:
@@ -45,7 +46,7 @@ def run_demo(args):
 
         flow_sample = np.load(args.flow_sample_path).transpose(0, 4, 1, 2, 3)
         print(flow_sample.shape)
-        out_flow_logit = get_scores(flow_sample, i3d_flow)
+        out_flow_logit = get_scores(flow_sample, i3d_flow,type='flow')
 
     # Joint model
     if args.flow and args.rgb:

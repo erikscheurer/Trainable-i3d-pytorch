@@ -38,7 +38,7 @@ parser.add_argument(
 parser.add_argument(
     '--classes_path',
     type=str,
-    default='data/classes.txt',
+    default='data/ucf101_i3d_raft/classes.txt',
     help='Path of the file containing classes names')
 
 # Sample arguments

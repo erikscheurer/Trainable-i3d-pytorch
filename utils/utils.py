@@ -1,10 +1,12 @@
 import argparse
 import shutil
 import time
+import torch
+
 
 from pathlib2 import Path
 from sklearn.model_selection import train_test_split
-
+from torchvision.transforms import Resize, InterpolationMode
 
 class Timer(object):
     def __init__(self, name=None):
@@ -25,6 +27,23 @@ def log(*snippets, end=None):
     else:
         print(time.strftime("==> [%Y-%m-%d %H:%M:%S]", time.localtime()) + " " + "".join([str(s) for s in snippets]),
               end=end)
+
+
+def upsample_flow(flow, h, w):
+    # from github.com/f-ilic/afd
+    # usefull function to bring the flow to h,w shape
+    # so that we can warp effectively an image of that size with it
+    batched = len(flow.shape) == 3
+    if batched:
+        flow = flow[None, ...] # add batch dimension
+    batch, h_new, w_new, _ = flow.shape
+    flow_correction = torch.Tensor((h / h_new, w / w_new))
+    f = (flow * flow_correction).permute(0, 3, 1, 2)
+
+    f = (Resize((h, w), interpolation=InterpolationMode.BICUBIC)(f)).permute(0, 2, 3, 1)
+    if batched:
+        f = f[0, ...]
+    return f
 
 
 def build_data_path(is_image=False, data_root=None):

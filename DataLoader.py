@@ -25,24 +25,24 @@ class SpacialTransform(Dataset):
 
         # Random vertical flipping
         self.vertical_flip = False
-        if random.random() > 0.5:
-            self.vertical_flip = True
+        # if random.random() > 0.5:
+        #     self.vertical_flip = True
 
-    def transform(self, image_nps):
-        image_PILs = []
-        # Resize
-        # resize = transforms.Resize(size=(520, 520))
-        # image_left = resize(image_left)
-        # image_right = resize(image_right)
-
-        for image_np in image_nps:
-            image_PIL = Image.fromarray(image_np.astype('uint8'))
-            image_PIL = TF.crop(image_PIL, *self.crop_dim)
-            if self.horizontal_flip: image_PIL = TF.hflip(image_PIL)
-            if self.vertical_flip: image_PIL = TF.vflip(image_PIL)
-            image_PIL = TF.to_tensor(image_PIL)
-            image_PILs.append(image_PIL)
-        return torch.stack(image_PILs)
+    def transform(self, imgs_np, flow = False):
+        # images_np: (T, H, W, C) # C = 3 for rgb, C = 2 for flow
+        # now do cropping and flipping if needed
+        if not flow:
+            imgs_np = imgs_np/255
+        imgs = torch.from_numpy(imgs_np).permute(3, 0, 1, 2) # (C, T, H, W) for torchvison
+        if not flow:
+            # BGR to RGB
+            imgs = imgs[[2, 1, 0], :, :]
+        imgs = TF.crop(imgs, *self.crop_dim)
+        if self.horizontal_flip:
+            imgs = TF.hflip(imgs)
+        if self.vertical_flip:
+            imgs = TF.vflip(imgs)
+        return imgs # (C, T, H, W)
 
 
 class RGBFlowDataset(Dataset):
@@ -54,34 +54,19 @@ class RGBFlowDataset(Dataset):
             root_dir (string): Directory with all the images.
         """
         self.root_dir = Path(root_dir)
-        self.sub_dirs = [i for i in self.root_dir.iterdir() if i.is_dir() and not i.stem.startswith('.')]
+        self.sub_dirs = [i for i in (self.root_dir/"flow").iterdir() if i.is_dir() and not i.stem.startswith('.')]
         self.class_names = [i.stem for i in self.sub_dirs]
         self.data_pairs = []
         self.spacial_transform = SpacialTransform()
         self.temporal_transform = TemporalRandomCrop(out_frame_num)
         # self.temporal_transform =
         for sub_dir in self.sub_dirs:
-            item_dirs = [i for i in sub_dir.iterdir() if i.is_dir() and not i.stem.startswith('.')]
-            for item_dir in item_dirs:
-                contents = [i for i in item_dir.iterdir() if i.is_file() and not i.stem.startswith('.')]
-                if contents:
-                    # print(contents, sample_rate)
-                    try:
-                        if sample_type == "num":
-                            temp_rgb = [i for i in contents if i.stem.startswith('rgb') and "SampleRate" in i.stem
-                                        and int(i.stem.split('_')[-1]) == sample_rate][0]
-                            temp_flow = [i for i in contents if i.stem.startswith('flow') and "SampleRate" in i.stem
-                                         and int(i.stem.split('_')[-1]) == sample_rate][0]
-                        elif sample_type == "fps":
-                            temp_rgb = [i for i in contents if i.stem.startswith('rgb') and "FPS" in i.stem
-                                        and int(i.stem.split('_')[-1]) == fps][0]
-                            temp_flow = [i for i in contents if i.stem.startswith('flow') and "FPS" in i.stem
-                                         and int(i.stem.split('_')[-1]) == fps][0]
-                        else:
-                            raise ValueError("sample_type should be 'num' or 'fps'")
-                    except IndexError:
-                        raise IndexError("Please make sure you specified input sample num or fps right.")
-                    self.data_pairs.append((temp_rgb, temp_flow, class_dict[sub_dir.stem]))
+            contents = [i for i in sub_dir.iterdir() if i.is_file() and not i.stem.startswith('.')]
+            if contents:
+                temp_flow = contents
+                temp_rgb = [Path(i.as_posix().replace('/flow/', '/rgb/')) for i in contents]
+                for f,r in zip(temp_flow, temp_rgb):
+                    self.data_pairs.append((r, f, class_dict[sub_dir.stem]))
 
     def __len__(self):
         return len(self.data_pairs)
@@ -92,11 +77,7 @@ class RGBFlowDataset(Dataset):
 
         rgb_data = self.temporal_transform(rgb_data)
         rgb_data = self.spacial_transform.transform(rgb_data)
-        # print(rgb_data.shape)
-        rgb_data = rgb_data.permute(1,0,2,3)
         flow_data = np.float32(np.load(self.data_pairs[idx][1]))
         flow_data = self.temporal_transform(flow_data)
-        flow_data = self.spacial_transform.transform(flow_data)
-        flow_data = flow_data.permute(1,0,2,3)
-        # print("Flow: ", flow_data.shape, "Rgb: ", rgb_data.shape, self.data_pairs[idx][0], self.data_pairs[idx][-1])
+        flow_data = self.spacial_transform.transform(flow_data, flow=True)
         return rgb_data, flow_data, self.data_pairs[idx][2]

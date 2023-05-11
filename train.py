@@ -11,23 +11,34 @@ from utils.utils import *
 from src.i3dpt import I3D
 from DataLoader import RGBFlowDataset
 from opts import parser
+import sys
+sys.path.append('FlowUnderAttack/flow_library')
+sys.path.append('FlowUnderAttack')
+sys.path.append('FlowUnderAttack/helper_functions')
+from FlowUnderAttack.helper_functions.ownutilities import show_images
+import time
+import os
+from tqdm import tqdm
 
-
-def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
+from torch.utils.tensorboard import SummaryWriter
+def train_model(models, criterion, optimizers, schedulers, num_epochs=40):
     since = time.time()
-
+    # unique name for each run (using timestamp)
+    t = time.strftime("%Y-%m-%d_%H:%M:%S", time.localtime())
+    writer = SummaryWriter(os.path.join("runs", t))
+    
     best_model_wts = {}
     for stream in streams:
         best_model_wts[stream] = copy.deepcopy(models[stream].state_dict())
 
     best_accs = {stream: 0.0 for stream in streams}
-
+    global_step = 0
     for epoch in range(num_epochs):
         log('Epoch {}/{}'.format(epoch, num_epochs - 1))
         log('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
+        for phase in ['train']:#, 'val']:
             if phase == 'train':
                 [i.train() for i in models.values()]  # Set model to training mode
                 running_losses = {"rgb": 0.0, "flow": 0.0}
@@ -39,7 +50,7 @@ def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
 
             # Iterate over data.
             data = {}
-            for data["rgb"], data["flow"], labels in data_loaders[phase]:
+            for data["rgb"], data["flow"], labels in tqdm(data_loaders[phase],total=len(data_loaders[phase])):
                 for stream in streams:
                     data[stream] = data[stream].to(device)
                 labels = labels.to(device)
@@ -54,7 +65,7 @@ def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
                 losses = {}
                 with torch.set_grad_enabled(phase == 'train'):
                     # Calculate the joint output of two model
-                    for stream in streams:
+                    for stream in streams: # rgb and flow
                         _, out_logits[stream] = models[stream](data[stream])
                         out_softmax = torch.nn.functional.softmax(out_logits[stream], 1)
                         _, preds = torch.max(out_softmax.data.cpu(), 1)
@@ -62,6 +73,7 @@ def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
 
                         # backward + optimize only if in training phase
                         if phase == 'train':
+                            writer.add_scalar(f"Training loss: {stream}", losses[stream], global_step=global_step)
                             losses[stream].backward()
                             optimizers[stream].step()
 
@@ -76,6 +88,7 @@ def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
                         losses["composed"] = criterion(out_softmax.cpu(), labels.cpu())
                         running_losses["composed"] += losses["composed"].item() * data["rgb"].shape[0]
                         running_corrects["composed"] += torch.sum(preds == labels.data.cpu())
+                global_step+=1
 
             if phase == 'train':
                 for scheduler in schedulers.values():
@@ -91,9 +104,11 @@ def train_model(models, criterion, optimizers, schedulers, num_epochs=25):
 
             # deep copy the model
             for stream in streams:
-                if phase == 'val' and epoch_accs[stream] > best_accs[stream]:
+                if epoch_accs[stream] > best_accs[stream]: # phase == 'val' and 
                     best_accs[stream] = epoch_accs[stream]
                     best_model_wts[stream] = copy.deepcopy(models[stream].state_dict())
+                    # save model
+                    torch.save(models[stream].state_dict(), os.path.join("model", f"{stream}_best_model.pth"))
         print()
 
     time_elapsed = time.time() - since
@@ -136,6 +151,7 @@ def main():
     # Here we must use 400 num_class because we have to load the weight from original file. We change it later.
     models = {"rgb": I3D(num_classes=400, modality='rgb'), "flow": I3D(num_classes=400, modality='flow')}
 
+    # freeze the first 15 layers
     for stream in streams:
         load_and_freeze_model(model=models[stream], num_classes=len(class_names), weight_path=weight_paths[stream])
         optimizers[stream] = optim.SGD(filter(lambda p: p.requires_grad, models[stream].parameters()), lr=0.001,
@@ -153,11 +169,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     class_names = [i.strip() for i in open(args.classes_path)]
     class_dicts = {k: v for v, k in enumerate(class_names)}
-    data_dir = Path('data/videos/pre-processed')
+    data_dir = Path('data/ucf101_i3d_raft')
     streams = ["rgb", "flow"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    rgb_flow_datasets = {x: RGBFlowDataset(data_dir / x, class_dicts,
+    rgb_flow_datasets = {x: RGBFlowDataset(data_dir, class_dicts,
                                            sample_rate=args.sample_num,
                                            sample_type=args.sample_type,
                                            fps=args.out_fps,

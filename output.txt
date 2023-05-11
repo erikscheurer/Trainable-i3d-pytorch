@@ -1,0 +1,72 @@
+==> [2023-05-10 09:52:26] Pre-trained model model/model_rgb.pth loaded successfully!
+==> [2023-05-10 09:52:26] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:26] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:26] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:26] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:26] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer Mixed frozen!
+==> [2023-05-10 09:52:26] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:39] Pre-trained model model/model_flow.pth loaded successfully!
+==> [2023-05-10 09:52:39] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:39] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:39] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:39] Layer Unit3Dpy frozen!
+==> [2023-05-10 09:52:39] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer Mixed frozen!
+==> [2023-05-10 09:52:39] Layer MaxPool3dTFPadding frozen!
+==> [2023-05-10 09:52:39] Epoch 0/49
+==> [2023-05-10 09:52:39] ----------
+==> [2023-05-10 12:37:52] train Loss (rgb): 4.6151 Acc: 0.0128
+==> [2023-05-10 12:37:52] train Loss (flow): 4.6150 Acc: 0.0158
+
+==> [2023-05-10 12:37:53] Epoch 1/49
+==> [2023-05-10 12:37:53] ----------
+==> [2023-05-10 15:21:48] train Loss (rgb): 4.6148 Acc: 0.0239
+==> [2023-05-10 15:21:48] train Loss (flow): 4.6148 Acc: 0.0207
+
+==> [2023-05-10 15:21:49] Epoch 2/49
+==> [2023-05-10 15:21:49] ----------
+==> [2023-05-10 18:03:49] train Loss (rgb): 4.6144 Acc: 0.0371
+==> [2023-05-10 18:03:49] train Loss (flow): 4.6147 Acc: 0.0289
+
+==> [2023-05-10 18:03:50] Epoch 3/49
+==> [2023-05-10 18:03:50] ----------
+==> [2023-05-10 20:49:00] train Loss (rgb): 4.6141 Acc: 0.0442
+==> [2023-05-10 20:49:00] train Loss (flow): 4.6145 Acc: 0.0371
+
+==> [2023-05-10 20:49:01] Epoch 4/49
+==> [2023-05-10 20:49:01] ----------
+==> [2023-05-10 23:31:30] train Loss (rgb): 4.6138 Acc: 0.0556
+==> [2023-05-10 23:31:30] train Loss (flow): 4.6143 Acc: 0.0391
+
+==> [2023-05-10 23:31:31] Epoch 5/49
+==> [2023-05-10 23:31:31] ----------
+==> [2023-05-11 02:13:57] train Loss (rgb): 4.6135 Acc: 0.0600
+==> [2023-05-11 02:13:57] train Loss (flow): 4.6142 Acc: 0.0476
+
+==> [2023-05-11 02:13:59] Epoch 6/49
+==> [2023-05-11 02:13:59] ----------
+==> [2023-05-11 04:55:56] train Loss (rgb): 4.6131 Acc: 0.0729
+==> [2023-05-11 04:55:56] train Loss (flow): 4.6140 Acc: 0.0494
+
+==> [2023-05-11 04:55:58] Epoch 7/49
+==> [2023-05-11 04:55:58] ----------
+==> [2023-05-11 07:37:15] train Loss (rgb): 4.6129 Acc: 0.0809
+==> [2023-05-11 07:37:15] train Loss (flow): 4.6139 Acc: 0.0502
+
+==> [2023-05-11 07:37:16] Epoch 8/49
+==> [2023-05-11 07:37:16] ----------
