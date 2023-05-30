@@ -34,12 +34,31 @@ parser.add_argument(
     default='data/kinetic-samples/v_CricketShot_g04_c01_flow.npy',
     help='Path to kinetics flow numpy sample')
 
+# Fine-tune arguments
+parser.add_argument(
+    '--num_freeze',
+    type=int,
+    default=15,
+    help='The number of layers to freeze')
+
 # Class argument
 parser.add_argument(
     '--classes_path',
     type=str,
     default='data/ucf101_i3d_raft/classes.txt',
     help='Path of the file containing classes names')
+
+parser.add_argument(
+    '--data_path',
+    type=str,
+    default='data/ucf101_i3d_raft',
+    help='Root path of the dataset.')
+
+parser.add_argument(
+    '--save_folder',
+    type=str,
+    default='',
+    help='Path of the folder to save the models.')
 
 # Sample arguments
 parser.add_argument(

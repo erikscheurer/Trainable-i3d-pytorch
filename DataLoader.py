@@ -48,25 +48,38 @@ class SpacialTransform(Dataset):
 class RGBFlowDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, class_dict, sample_rate=1, sample_type="num", fps=5, out_frame_num=32, augment=False):
+    def __init__(self, root_dir, split_dir, split, class_dict, sample_rate=1, sample_type="num", fps=5, out_frame_num=32, augment=False):
         """
         Args:
             root_dir (string): Directory with all the images.
         """
+        if split == "train":
+            files =      [i.split(' ')[0] for i in (Path(split_dir)/"trainlist01.txt").open('r').read().split('\n') if i]
+            files.extend([i.split(' ')[0] for i in (Path(split_dir)/"trainlist02.txt").open('r').read().split('\n') if i])
+            files.extend([i.split(' ')[0] for i in (Path(split_dir)/"trainlist03.txt").open('r').read().split('\n') if i])
+        elif split == "val":
+            files =      [i.split(' ')[0] for i in (Path(split_dir)/"testlist01.txt").open('r').read().split('\n') if i]
+        elif split == "test":
+            files =      [i.split(' ')[0] for i in (Path(split_dir)/"testlist01.txt").open('r').read().split('\n') if i]
+            files.extend([i.split(' ')[0] for i in (Path(split_dir)/"testlist02.txt").open('r').read().split('\n') if i])
+            files.extend([i.split(' ')[0] for i in (Path(split_dir)/"testlist03.txt").open('r').read().split('\n') if i])
+
         self.root_dir = Path(root_dir)
         self.sub_dirs = [i for i in (self.root_dir/"flow").iterdir() if i.is_dir() and not i.stem.startswith('.')]
         self.class_names = [i.stem for i in self.sub_dirs]
         self.data_pairs = []
         self.spacial_transform = SpacialTransform()
         self.temporal_transform = TemporalRandomCrop(out_frame_num)
+        self.augment = augment
         # self.temporal_transform =
-        for sub_dir in self.sub_dirs:
+        for sub_dir in self.sub_dirs: # 
             contents = [i for i in sub_dir.iterdir() if i.is_file() and not i.stem.startswith('.')]
             if contents:
                 temp_flow = contents
                 temp_rgb = [Path(i.as_posix().replace('/flow/', '/rgb/')) for i in contents]
                 for f,r in zip(temp_flow, temp_rgb):
-                    self.data_pairs.append((r, f, class_dict[sub_dir.stem]))
+                    if f.parent.stem+'/'+f.stem+'.avi' in files:
+                        self.data_pairs.append((r, f, class_dict[sub_dir.stem]))
 
     def __len__(self):
         return len(self.data_pairs)
@@ -75,8 +88,8 @@ class RGBFlowDataset(Dataset):
         rgb_data = np.float32(np.load(self.data_pairs[idx][0]))
         self.spacial_transform.refresh_random(rgb_data[0])
 
-        rgb_data = self.temporal_transform(rgb_data)
-        rgb_data = self.spacial_transform.transform(rgb_data)
+        rgb_data = self.temporal_transform(rgb_data) # (T, H, W, C)
+        rgb_data = self.spacial_transform.transform(rgb_data) # (C, T, H, W)
         flow_data = np.float32(np.load(self.data_pairs[idx][1]))
         flow_data = self.temporal_transform(flow_data)
         flow_data = self.spacial_transform.transform(flow_data, flow=True)

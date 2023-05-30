@@ -20,7 +20,7 @@ import helper_functions.ownutilities as ownutilities
 net = 'RAFT'#'FlowNetC'#
 custom_weight_path = './FlowUnderAttack/models/_pretrained_weights/raft-sintel.pth'#FlowNet2-C_checkpoint.pth.tar'#
 
-model_takes_unit_input = ownutilities.model_takes_unit_input(net)
+model_takes_unit_input = ownutilities.takes_unit_input(net)
 model, path_weights = ownutilities.import_and_load(net, custom_weight_path=custom_weight_path, make_unit_input=not model_takes_unit_input, variable_change=False, make_scaled_input_model=True,device='cuda')
 model.eval()
 for p in model.parameters():
@@ -241,6 +241,37 @@ def compute_flow(video_object, opts, upsample_factor=2.3):
     return flow
 
 
+def compute_tvl1_flow(video_object, out_path):
+    """Compute the TV-L1 optical flow."""
+    flow = []
+
+    bins = np.linspace(-20, 20, num=256)
+    TVL1 = cv2.optflow.DualTVL1OpticalFlow_create()
+    frame1 = video_object.get_frame()
+    prev = cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY)
+    for i in range(len(video_object) - 1):
+        frame2 = video_object.get_frame()
+        curr = cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY)
+        curr_flow = TVL1.calc(prev, curr, None)
+        assert (curr_flow.dtype == np.float32)
+
+        # Truncate large motions
+        curr_flow[curr_flow >= 20] = 20
+        curr_flow[curr_flow <= -20] = -20
+
+        curr_flow = np.digitize(curr_flow, bins)
+        # curr_flow = (curr_flow / 255.) * 2 - 1
+
+        # Append this flow frame
+        flow.append(curr_flow)
+
+        prev = curr
+
+    flow = np.array(flow)  # np.float32(
+    # np.save(out_path["flow"], flow)
+    log("Save flow with shape ", flow.shape)
+    return flow
+
 def pre_process(video_path, opts, class_name=None):
     video_path = Path(video_path)
     
@@ -256,6 +287,7 @@ def pre_process(video_path, opts, class_name=None):
     video_object.reset()
     with Timer('Compute flow'):
         log('Extract Flow...')
+        # flow_data = compute_tvl1_flow(video_object, opts)
         flow_data = compute_flow(video_object, opts)
         np.save(out_path_dic["flow"]/f"{video_path.stem}.npy", flow_data)
     return rgb_data, flow_data
