@@ -1,0 +1,4 @@
+[submodule "FlowUnderAttack"]
+	path = FlowUnderAttack
+	url = git@github.com:cv-stuttgart/FlowUnderAttack.git
+	branch = PatchAttackDefense
