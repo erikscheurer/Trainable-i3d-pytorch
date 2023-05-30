@@ -218,7 +218,9 @@ if __name__ == "__main__":
                                            sample_type=args.sample_type,
                                            fps=args.out_fps,
                                            out_frame_num=args.out_frame_num,
-                                           augment=(x == "train"))
+                                           augment=(x == "train"),
+                                           rgb=args.rgb,
+                                           flow=args.flow)
                          for x in ['train', 'val', 'test']}
     data_loaders = {x: torch.utils.data.DataLoader(rgb_flow_datasets[x], batch_size=64,
                                                    shuffle=True, num_workers=0, 

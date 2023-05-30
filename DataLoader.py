@@ -48,11 +48,14 @@ class SpacialTransform(Dataset):
 class RGBFlowDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, split_dir, split, class_dict, sample_rate=1, sample_type="num", fps=5, out_frame_num=32, augment=False):
+    def __init__(self, root_dir, split_dir, split, class_dict, sample_rate=1, sample_type="num", fps=5, out_frame_num=32, augment=False, flow=True, rgb=True):
         """
         Args:
             root_dir (string): Directory with all the images.
         """
+        self.flow = flow
+        self.rgb = rgb
+
         if split == "train":
             files =      [i.split(' ')[0] for i in (Path(split_dir)/"trainlist01.txt").open('r').read().split('\n') if i]
             files.extend([i.split(' ')[0] for i in (Path(split_dir)/"trainlist02.txt").open('r').read().split('\n') if i])
@@ -85,12 +88,19 @@ class RGBFlowDataset(Dataset):
         return len(self.data_pairs)
 
     def __getitem__(self, idx):
-        rgb_data = np.float32(np.load(self.data_pairs[idx][0]))
-        self.spacial_transform.refresh_random(rgb_data[0])
-
-        rgb_data = self.temporal_transform(rgb_data) # (T, H, W, C)
-        rgb_data = self.spacial_transform.transform(rgb_data) # (C, T, H, W)
-        flow_data = np.float32(np.load(self.data_pairs[idx][1]))
-        flow_data = self.temporal_transform(flow_data)
-        flow_data = self.spacial_transform.transform(flow_data, flow=True)
+        if self.rgb:
+            rgb_data = np.float32(np.load(self.data_pairs[idx][0]))
+            self.spacial_transform.refresh_random(rgb_data[0])
+            rgb_data = self.temporal_transform(rgb_data) # (T, H, W, C)
+            rgb_data = self.spacial_transform.transform(rgb_data) # (C, T, H, W)
+        else:
+            rgb_data = np.zeros(1)
+        if self.flow:
+            flow_data = np.float32(np.load(self.data_pairs[idx][1]))
+            if not self.rgb:
+                self.spacial_transform.refresh_random(flow_data[0])
+            flow_data = self.temporal_transform(flow_data)
+            flow_data = self.spacial_transform.transform(flow_data, flow=True)
+        else:
+            flow_data = np.zeros(1)
         return rgb_data, flow_data, self.data_pairs[idx][2]

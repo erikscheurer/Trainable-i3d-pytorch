@@ -16,11 +16,13 @@ _IMAGE_SIZE = 224
 ## FlowUnderAttack load model
 import sys
 sys.path.append(f'./FlowUnderAttack/')
+sys.path.append(f'./FlowUnderAttack/flow_library')
 import helper_functions.ownutilities as ownutilities
+from helper_functions.ownutilities import show_images
 net = 'RAFT'#'FlowNetC'#
 custom_weight_path = './FlowUnderAttack/models/_pretrained_weights/raft-sintel.pth'#FlowNet2-C_checkpoint.pth.tar'#
 
-model_takes_unit_input = ownutilities.takes_unit_input(net)
+model_takes_unit_input = ownutilities.model_takes_unit_input(net)
 model, path_weights = ownutilities.import_and_load(net, custom_weight_path=custom_weight_path, make_unit_input=not model_takes_unit_input, variable_change=False, make_scaled_input_model=True,device='cuda')
 model.eval()
 for p in model.parameters():
@@ -169,9 +171,10 @@ def compute_rgb(video_object, out_path):
     #     rgb.append(frame)
     # # rgb = rgb[:-1]
     # rgb = np.float32(np.array(rgb))
-    rgb = np.array(video_object.frames[:-1])
+    # rgb = np.array(video_object.frames[:-1])
     # np.save(out_path["rgb"], rgb)
     # log('save rgb with shape ', rgb.shape)
+    rgb = np.array([video_object.get_frame() for _ in range(len(video_object) - 1)])
     return rgb
 
 @lru_cache(maxsize=1)
@@ -259,7 +262,7 @@ def compute_tvl1_flow(video_object, out_path):
         curr_flow[curr_flow >= 20] = 20
         curr_flow[curr_flow <= -20] = -20
 
-        curr_flow = np.digitize(curr_flow, bins)
+        # curr_flow = np.digitize(curr_flow, bins)
         # curr_flow = (curr_flow / 255.) * 2 - 1
 
         # Append this flow frame
